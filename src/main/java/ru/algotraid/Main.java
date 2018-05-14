@@ -8,62 +8,92 @@ public class Main {
     public static void main(String[] args) throws InterruptedException {
         InArBot inArBot = new InArBot(apiKey, secretKey, true);
 
-        while (true){
-            System.out.println("USDT -> ADA -> BNB -> USDT " +
-                    inArBot.getProfit("ADAUSDT","ADABNB","BNBUSDT", true));
-            Thread.sleep(100);
+        while (true) {
+            Double profit;
 
-            System.out.println("USDT -> BCC -> BNB -> USDT " +
-                    inArBot.getProfit("BCCUSDT","BCCBNB","BNBUSDT", true));
+            profit = inArBot.getProfit("ADAUSDT", "ADABNB", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> ADA -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BTC -> BNB -> USDT " +
-                    inArBot.getProfit("BTCUSDT","BNBBTC","BNBUSDT", true));
+            profit = inArBot.getProfit("BCCUSDT", "BCCBNB", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BCC -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> ETH -> BNB -> USDT " +
-                    inArBot.getProfit("ETHUSDT","BNBETH","BNBUSDT", true));
+            profit = inArBot.getProfit("BTCUSDT", "BNBBTC", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BTC -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> LTC -> BNB -> USDT " +
-                    inArBot.getProfit("LTCUSDT","LTCBNB","BNBUSDT", true));
+            profit = inArBot.getProfit("ETHUSDT", "BNBETH", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> ETH -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> NEO -> BNB -> USDT " +
-                    inArBot.getProfit("NEOUSDT","NEOBNB","BNBUSDT", true));
+            profit = inArBot.getProfit("LTCUSDT", "LTCBNB", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> LTC -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> QTUM -> BNB -> USDT " +
-                    inArBot.getProfit("QTUMUSDT","QTUMBNB","BNBUSDT", true));
+            profit = inArBot.getProfit("NEOUSDT", "NEOBNB", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> NEO -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> ADA -> USDT " +
-                    inArBot.getProfit("BNBUSDT","ADABNB","ADAUSDT", false));
+            profit = inArBot.getProfit("QTUMUSDT", "QTUMBNB", "BNBUSDT", true);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> QTUM -> BNB -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> BCC -> USDT " +
-                    inArBot.getProfit("BNBUSDT","BCCBNB","BCCUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "ADABNB", "ADAUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> ADA -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> BTC -> USDT " +
-                    inArBot.getProfit("BNBUSDT","BNBBTC","BTCUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "BCCBNB", "BCCUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> BCC -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> ETH -> USDT " +
-                    inArBot.getProfit("BNBUSDT","BNBETH","ETHUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "BNBBTC", "BTCUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> BTC -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> LTC -> USDT " +
-                    inArBot.getProfit("BNBUSDT","LTCBNB","LTCUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "BNBETH", "ETHUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> ETH -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> NEO -> USDT " +
-                    inArBot.getProfit("BNBUSDT","NEOBNB","NEOUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "LTCBNB", "LTCUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> LTC -> USDT " + profit);
+            }
 
-            System.out.println("USDT -> BNB -> QTUM -> USDT " +
-                    inArBot.getProfit("BNBUSDT","QTUMBNB","QTUMUSDT", false));
+            profit = inArBot.getProfit("BNBUSDT", "NEOBNB", "NEOUSDT", false);
             Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> NEO -> USDT " + profit);
+            }
+
+            profit = inArBot.getProfit("BNBUSDT", "QTUMBNB", "QTUMUSDT", false);
+            Thread.sleep(100);
+            if (profit > 0.1) {
+                System.out.println("USDT -> BNB -> QTUM -> USDT " + profit);
+            }
         }
     }
 }
