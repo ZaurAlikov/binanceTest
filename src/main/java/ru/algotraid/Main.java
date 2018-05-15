@@ -23,7 +23,7 @@ public class Main {
             Thread.sleep(100);
             if (profit > step) {
                 System.out.println("USDT -> ADA -> BNB -> USDT " + profit);
-                inArBot.buyCycle(bet,"ADAUSDT", "ADAUSDT", "BNBUSDT", true);
+                inArBot.buyCycle(bet,"ADAUSDT", "ADABNB", "BNBUSDT", true);
 
             }
 

@@ -32,9 +32,7 @@ public class InArBot {
         Double secondBuy;
         Double thirdBuy;
 
-
         List<TickerPrice> prices = apiRestClient.getAllPrices();
-
         firstPairPrice = getPrice(prices, firstPair);
         secondPairPrice = getPrice(prices, secondPair);
         thirdPairPrice = getPrice(prices, thirdPair);
@@ -63,7 +61,7 @@ public class InArBot {
         countPayCoins = buyCoins(sumForTrade, firstPair, firstPairPrice, directBuy, 1);
         countPayCoins = buyCoins(countPayCoins, secondPair, secondPairPrice, directBuy ,2);
         countPayCoins = buyCoins(countPayCoins, thirdPair, thirdPairPrice, directBuy ,3);
-        System.out.println("Profit = " + countPayCoins);
+        System.out.println("Profit = " + (countPayCoins - sumForTrade));
     }
 
     private Double buyCoins(Double sumForTrade, String pair, Double pairPrice, boolean direct, int numPair){
@@ -71,16 +69,20 @@ public class InArBot {
         switch (numPair){
             case 1:
                 if (direct) pairQuantity = withCommission(sumForTrade) / pairPrice;
-                else pairQuantity = withCommission(sumForTrade) * pairPrice;
+                else pairQuantity = withCommission(sumForTrade) / pairPrice;
+                break;
             case 2:
                 if (pair.contains("BTC") || pair.contains("ETH")) {
                     pairQuantity = withCommission(sumForTrade) / pairPrice;
                 } else {
-                    pairQuantity = withCommission(sumForTrade) * pairPrice;
+                    if (direct) pairQuantity = withCommission(sumForTrade) * pairPrice;
+                    else pairQuantity = withCommission(sumForTrade) / pairPrice;
                 }
+                break;
             case 3:
                 if (direct) pairQuantity = withCommission(sumForTrade) * pairPrice;
-                else pairQuantity = withCommission(sumForTrade) / pairPrice;
+                else pairQuantity = withCommission(sumForTrade) * pairPrice;
+                break;
         }
 
 //        if (pairQuantity == 0.0){
