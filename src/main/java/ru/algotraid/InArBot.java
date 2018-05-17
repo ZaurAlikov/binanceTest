@@ -1,5 +1,8 @@
 package ru.algotraid;
 
+import com.binance.api.client.BinanceApiAsyncRestClient;
+import com.binance.api.client.BinanceApiClientFactory;
+import com.binance.api.client.BinanceApiRestClient;
 import com.binance.api.client.domain.account.NewOrder;
 import com.binance.api.client.domain.account.NewOrderResponse;
 import com.binance.api.client.domain.general.ExchangeInfo;
@@ -16,7 +19,9 @@ import java.util.Optional;
 public class InArBot {
 
     private Double commission;
-    private BinanceApiRestClientImpl apiRestClient;
+    private BinanceApiClientFactory factory;
+    private BinanceApiRestClient apiRestClient;
+    private BinanceApiAsyncRestClient apiAsyncRestClient;
     private ExchangeInfo exchangeInfo;
     private BalanceCache balanceCache;
     private List<TickerPrice> prices;
@@ -24,15 +29,22 @@ public class InArBot {
     private Double allProfit = 0.0;
 
     public InArBot(String apiKey, String secretKey, Boolean BNBCommission) throws InterruptedException {
+        this.factory = BinanceApiClientFactory.newInstance(apiKey, secretKey);
+        this.apiRestClient = factory.newRestClient();
+        this.apiAsyncRestClient = factory.newAsyncRestClient();
         this.apiRestClient = new BinanceApiRestClientImpl(apiKey, secretKey);
         this.balanceCache = new BalanceCache(apiKey, secretKey);
         this.exchangeInfo = apiRestClient.getExchangeInfo();
+        startRefreshingExchangeInfo();
         refreshPrices();
         if (BNBCommission) commission = 0.0005;
         else commission = 0.001;
     }
 
-    public Double getProfit(Double bet, String firstPair, String secondPair, String thirdPair, boolean directCalc) throws InterruptedException {
+    public Double getProfit(Double bet, PairTriangle pairTriangle) throws InterruptedException {
+        String firstPair = pairTriangle.getFirstPair();
+        String secondPair = pairTriangle.getSecondPair();
+        String thirdPair = pairTriangle.getThirdPair();
         Double firstBuy;
         Double secondBuy;
         Double thirdBuy;
@@ -43,7 +55,7 @@ public class InArBot {
         if (firstPairPrice != 0.0 && secondPairPrice != 0.0 && thirdPairPrice != 0.0) {
             firstBuy = withCommission(bet) / firstPairPrice;
             firstBuy = Double.valueOf(normalizeQuantity(firstPair, firstBuy));
-            secondBuy = secondPairCalc(secondPair, firstBuy, directCalc);
+            secondBuy = secondPairCalc(secondPair, firstBuy, pairTriangle.isDirect());
             secondBuy = Double.valueOf(normalizeQuantity(secondPair, secondBuy));
             thirdBuy = withCommission(secondBuy) * thirdPairPrice;
             thirdBuy = Double.valueOf(normalizeQuantity(thirdPair, thirdBuy));
@@ -56,17 +68,22 @@ public class InArBot {
         return Double.valueOf(apiRestClient.getAccount(100000L, System.currentTimeMillis()).getAssetBalance(symbol).getFree());
     }
 
-    public void buyCycle(Double sumForTrade, String firstPair, String secondPair, String thirdPair, boolean directBuy) {
+    public void buyCycle(Double sumForTrade, PairTriangle pairTriangle) throws InterruptedException {
+        String firstPair = pairTriangle.getFirstPair();
+        String secondPair = pairTriangle.getSecondPair();
+        String thirdPair = pairTriangle.getThirdPair();
+        boolean directBuy = pairTriangle.isDirect();
         Double countPayCoins;
-        countPayCoins = Double.valueOf(buyCoins(sumForTrade, firstPair, directBuy, 1).getExecutedQty());
-        countPayCoins = Double.valueOf(buyCoins(countPayCoins, secondPair, directBuy, 2).getExecutedQty());
-        countPayCoins = Double.valueOf(buyCoins(countPayCoins, thirdPair, directBuy, 3).getExecutedQty());
-
-        if (countPayCoins != 0.0) {
-            allProfit = allProfit + (countPayCoins - sumForTrade);
-            System.out.println("Profit = " + (countPayCoins - sumForTrade) + " | All profit = " + allProfit);
-        } else {
-            System.out.println("Profit = " + 0.0);
+        if (isAllPairTrading(pairTriangle)) {
+            countPayCoins = Double.valueOf(buyCoins(sumForTrade, firstPair, directBuy, 1).getExecutedQty());
+            countPayCoins = Double.valueOf(buyCoins(countPayCoins, secondPair, directBuy, 2).getExecutedQty());
+            countPayCoins = Double.valueOf(buyCoins(countPayCoins, thirdPair, directBuy, 3).getExecutedQty());
+            if (countPayCoins != 0.0) {
+                allProfit = allProfit + (countPayCoins - sumForTrade);
+                System.out.println("Profit = " + (countPayCoins - sumForTrade) + " | All profit = " + allProfit);
+            } else {
+                System.out.println("Profit = " + 0.0);
+            }
         }
     }
 
@@ -124,8 +141,15 @@ public class InArBot {
                 pairInfo.getStatus().equals(SymbolStatus.TRADING);
     }
 
+    private Boolean isAllPairTrading(PairTriangle pairTriangle) {
+        boolean pair1 = exchangeInfo.getSymbolInfo(pairTriangle.getFirstPair()).getStatus().equals(SymbolStatus.TRADING);
+        boolean pair2 = exchangeInfo.getSymbolInfo(pairTriangle.getSecondPair()).getStatus().equals(SymbolStatus.TRADING);
+        boolean pair3 = exchangeInfo.getSymbolInfo(pairTriangle.getThirdPair()).getStatus().equals(SymbolStatus.TRADING);
+        return pair1 && pair2 && pair3;
+    }
+
     private NewOrderResponse buyOrSell(String pair, String normalQuantity, int numPair, boolean direct) {
-        NewOrderResponse response;
+        NewOrderResponse response = new NewOrderResponse();
         switch (numPair) {
             case 1:
                 response = apiRestClient.newOrder(NewOrder.marketBuy(pair, normalQuantity));
@@ -149,7 +173,6 @@ public class InArBot {
                 response = apiRestClient.newOrder(NewOrder.marketSell(pair, normalQuantity));
                 break;
             default:
-                response = new NewOrderResponse();
                 response.setExecutedQty("0.0");
         }
         return response;
@@ -190,6 +213,19 @@ public class InArBot {
                 Thread.sleep(100);
             }
         } while (timeoutCount <= 9);
+    }
+
+    private void startRefreshingExchangeInfo() throws InterruptedException {
+        new Thread(() -> {
+            while (true){
+                apiAsyncRestClient.getExchangeInfo((ExchangeInfo response) -> exchangeInfo = response);
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
     public BalanceCache getBalanceCache() {
