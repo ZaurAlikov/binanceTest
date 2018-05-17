@@ -8,8 +8,8 @@ public class MainBot {
     private BalanceCache balanceCache;
     private InArBot inArBot;
     private Double myBalance;
-    private Double percentForBet = 0.9;
-    private Double diffInPresent = 0.01;
+    private Double percentForBet = 1.0;
+    private Double diffInPresent = 0.1;
     private Double diff2InPresent = 0.3;
     private List<PairTriangle> pairTriangleList;
 
@@ -22,8 +22,8 @@ public class MainBot {
 
     public void start() throws InterruptedException {
         while (true) {
-//            myBalance = 33.0;
-            myBalance = Double.valueOf(balanceCache.getAccountBalanceCache().get("USDT").getFree());
+            myBalance = 15.0;
+//            myBalance = Double.valueOf(balanceCache.getAccountBalanceCache().get("USDT").getFree());
             Double bet = myBalance * percentForBet;
             Double profit;
 //            Double balanceBefore;
@@ -43,7 +43,7 @@ public class MainBot {
                         profit = inArBot.getProfit(bet, pairTriangle);
                     } while (profit >= diff2InPresent/* && resultBalance >= 0.0*/);
                     System.out.println(System.currentTimeMillis() - t1);
-                }
+                } else System.out.println(profit);
                 Thread.sleep(100);
             }
         }

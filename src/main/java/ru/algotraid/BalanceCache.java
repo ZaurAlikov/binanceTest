@@ -59,7 +59,7 @@ public class BalanceCache {
                 for (AssetBalance assetBalance : response.getAccountUpdateEvent().getBalances()) {
                     accountBalanceCache.put(assetBalance.getAsset(), assetBalance);
                 }
-                System.out.println(accountBalanceCache);
+                System.out.println(accountBalanceCache.get("USDT"));
             }
         });
     }
