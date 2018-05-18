@@ -42,8 +42,8 @@ public class MainBot {
 //                    resultBalance = balanceAfter - balanceBefore;
                         profit = inArBot.getProfit(bet, pairTriangle);
                     } while (profit >= diff2InPresent/* && resultBalance >= 0.0*/);
-                    System.out.println(System.currentTimeMillis() - t1);
-                } else System.out.println(profit);
+//                    System.out.println(System.currentTimeMillis() - t1);
+                } else /*System.out.println(profit);*/
                 Thread.sleep(100);
             }
         }

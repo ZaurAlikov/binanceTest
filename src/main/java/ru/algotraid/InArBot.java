@@ -10,7 +10,6 @@ import com.binance.api.client.domain.general.SymbolInfo;
 import com.binance.api.client.domain.general.SymbolStatus;
 import com.binance.api.client.domain.market.TickerPrice;
 import com.binance.api.client.exception.BinanceApiException;
-import com.binance.api.client.impl.BinanceApiRestClientImpl;
 
 import java.util.List;
 import java.util.Locale;
@@ -19,17 +18,15 @@ import java.util.Optional;
 public class InArBot {
 
     private Double commission;
-    private BinanceApiClientFactory factory;
     private BinanceApiRestClient apiRestClient;
     private BinanceApiAsyncRestClient apiAsyncRestClient;
     private ExchangeInfo exchangeInfo;
     private BalanceCache balanceCache;
     private List<TickerPrice> prices;
-
     private Double allProfit = 0.0;
 
     public InArBot(String apiKey, String secretKey, Boolean BNBCommission) throws InterruptedException {
-        this.factory = BinanceApiClientFactory.newInstance(apiKey, secretKey);
+        BinanceApiClientFactory factory = BinanceApiClientFactory.newInstance(apiKey, secretKey);
         this.apiRestClient = factory.newRestClient();
         this.apiAsyncRestClient = factory.newAsyncRestClient();
         this.balanceCache = new BalanceCache(apiKey, secretKey);
@@ -41,30 +38,44 @@ public class InArBot {
         else commission = 0.001;
     }
 
-    public Double getProfit(Double bet, PairTriangle pairTriangle) throws InterruptedException {
+    public Double getProfit(Double startAmt, PairTriangle pairTriangle) throws InterruptedException {
         String firstPair = pairTriangle.getFirstPair();
         String secondPair = pairTriangle.getSecondPair();
         String thirdPair = pairTriangle.getThirdPair();
-        Double firstBuy;
-        Double secondBuy;
-        Double thirdBuy;
         Double firstPairPrice = getPrice(firstPair);
         Double secondPairPrice = getPrice(secondPair);
         Double thirdPairPrice = getPrice(thirdPair);
+        Double amtAfterFirstTransaction;
+        Double amtAfterSecondTransaction;
+        Double amtAfterThirdTransaction;
         if (firstPairPrice != 0.0 && secondPairPrice != 0.0 && thirdPairPrice != 0.0) {
-            firstBuy = withCommission(bet) / firstPairPrice;
-            firstBuy = Double.valueOf(normalizeQuantity(firstPair, firstBuy));
-            boolean isNotional1 = isNotional(firstBuy, firstPair);
-            secondBuy = secondPairCalc(secondPair, firstBuy, pairTriangle.isDirect());
-            secondBuy = Double.valueOf(normalizeQuantity(secondPair, secondBuy));
-            boolean isNotional2 = isNotional(secondBuy, secondPair);
-            thirdBuy = withCommission(secondBuy) * thirdPairPrice;
-            thirdBuy = Double.valueOf(normalizeQuantity(thirdPair, thirdBuy));
-            boolean isNotional3 = isNotional(thirdBuy, thirdPair);
+            amtAfterFirstTransaction = Double.valueOf(normalizeQuantity(firstPair, withCommission(startAmt / firstPairPrice)));
+            boolean isNotional1 = isNotional(amtAfterFirstTransaction, firstPair);
+            boolean isNotional2;
+            if (pairTriangle.isDirect()) {
+                if (secondPair.contains("BTC") || secondPair.contains("ETH")) {
+                    amtAfterSecondTransaction = Double.valueOf(normalizeQuantity(secondPair, withCommission(amtAfterFirstTransaction / secondPairPrice)));
+                    isNotional2 = isNotional(amtAfterSecondTransaction, secondPair);
+                } else {
+                    amtAfterSecondTransaction = Double.valueOf(normalizeQuantity(secondPair, withCommission(amtAfterFirstTransaction * secondPairPrice)));
+                    isNotional2 = isNotional(amtAfterSecondTransaction, secondPair);
+                }
+            } else {
+                if (secondPair.contains("BTC") || secondPair.contains("ETH")) {
+                    amtAfterSecondTransaction = Double.valueOf(normalizeQuantity(secondPair, withCommission(amtAfterFirstTransaction * secondPairPrice)));
+                    isNotional2 = isNotional(amtAfterSecondTransaction, secondPair);
+                } else {
+                    amtAfterSecondTransaction = Double.valueOf(normalizeQuantity(secondPair, withCommission(amtAfterFirstTransaction / secondPairPrice)));
+                    isNotional2 = isNotional(amtAfterSecondTransaction, secondPair);
+                }
+            }
+            amtAfterThirdTransaction = withCommission(amtAfterSecondTransaction * thirdPairPrice);
+            boolean isNotional3 = isNotional(amtAfterThirdTransaction, thirdPair);
             if (isNotional1 && isNotional2 && isNotional3){
-                return (thirdBuy - bet) * (100 / bet);
+                Double d = (amtAfterThirdTransaction - startAmt) * (100 / startAmt);
+//                System.out.println("Профит в методе getProfit" + amtAfterThirdTransaction);
+                return (amtAfterThirdTransaction - startAmt) * (100 / startAmt);
             } else return 0.0;
-
         }
         return 0.0;
     }
@@ -73,59 +84,126 @@ public class InArBot {
         return Double.valueOf(apiRestClient.getAccount(100000L, System.currentTimeMillis()).getAssetBalance(symbol).getFree());
     }
 
-    public void buyCycle(Double sumForTrade, PairTriangle pairTriangle) throws InterruptedException {
+    public void buyCycle(Double startAmt, PairTriangle pairTriangle) throws InterruptedException {
         String firstPair = pairTriangle.getFirstPair();
         String secondPair = pairTriangle.getSecondPair();
         String thirdPair = pairTriangle.getThirdPair();
-        boolean directBuy = pairTriangle.isDirect();
-        Double countPayCoins;
+        boolean direct = pairTriangle.isDirect();
         if (isAllPairTrading(pairTriangle)) {
-            countPayCoins = Double.valueOf(buyCoins(sumForTrade, firstPair, directBuy, 1).getExecutedQty());
-            countPayCoins = Double.valueOf(buyCoins(countPayCoins, secondPair, directBuy, 2).getExecutedQty());
-            countPayCoins = Double.valueOf(buyCoins(countPayCoins, thirdPair, directBuy, 3).getExecutedQty());
-            if (countPayCoins != 0.0) {
-                allProfit = allProfit + (countPayCoins - sumForTrade);
-                System.out.println("Profit = " + (countPayCoins - sumForTrade) + " | All profit = " + allProfit);
+            Double amtAfterFirstTransaction = Double.valueOf(TestBuyCoins(startAmt, firstPair, direct, 1).getExecutedQty());
+            Double amtAfterSecondTransaction = Double.valueOf(TestBuyCoins(amtAfterFirstTransaction, secondPair, direct, 2).getExecutedQty());
+            Double amtAfterThirdTransaction = Double.valueOf(TestBuyCoins(amtAfterSecondTransaction, thirdPair, direct, 3).getExecutedQty());
+//            System.out.println("Профит в методе buyCycle" + countPayCoins);
+            if (amtAfterThirdTransaction != 0.0) {
+                allProfit = allProfit + (amtAfterThirdTransaction - startAmt);
+                System.out.println("Profit = " + (amtAfterThirdTransaction - startAmt) + " | All profit = " + allProfit);
             } else {
                 System.out.println("Profit = " + 0.0);
             }
         }
     }
 
-    private NewOrderResponse buyCoins(Double sumForTrade, String pair, boolean direct, int numPair) {
+    private NewOrderResponse buyCoins(Double amtForTrade, String pair, boolean direct, int numPair) {
         Double pairQuantity;
-        String normalQuantity = "0.0";
+        String normalQuantity;
         NewOrderResponse orderResponse = new NewOrderResponse();
 
         switch (numPair) {
             case 1:
-                pairQuantity = withCommission(sumForTrade) / getPrice(pair);
+                pairQuantity = amtForTrade / getPrice(pair);
                 normalQuantity = normalizeQuantity(pair, pairQuantity);
-//                if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, sumForTrade, numPair, direct);
+                if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, direct);
                 break;
             case 2:
-                pairQuantity = secondPairCalc(pair, sumForTrade, direct);
-                normalQuantity = normalizeQuantity(pair, pairQuantity);
-//                if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, sumForTrade, numPair, direct);
+                if (direct) {
+                    if (pair.contains("BTC") || pair.contains("ETH")) {
+                        pairQuantity = amtForTrade / getPrice(pair);
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, true);
+                    } else {
+                        normalQuantity = normalizeQuantity(pair, amtForTrade);
+                        if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, true);
+                    }
+                } else {
+                    if (pair.contains("BTC") || pair.contains("ETH")) {
+                        normalQuantity = normalizeQuantity(pair, amtForTrade);
+                        if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, false);
+                    } else {
+                        pairQuantity = amtForTrade / getPrice(pair);
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, false);
+                    }
+                }
                 break;
             case 3:
-                pairQuantity = withCommission(sumForTrade) * getPrice(pair);
-                normalQuantity = normalizeQuantity(pair, pairQuantity);
-                System.out.println(sumForTrade + " " + pairQuantity + " " + normalQuantity + " " + getPrice(pair));
-//                if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, sumForTrade, numPair, direct);
+                normalQuantity = normalizeQuantity(pair, amtForTrade);
+                if (isValidQty(pair, normalQuantity)) orderResponse = buyOrSell(pair, normalQuantity, numPair, direct);
                 break;
             default:
         }
-//--------- tests ------------------------------------------------------------------------------------------------------
-        if (isValidQty(pair, normalQuantity)) {
-            apiRestClient.newOrderTest(NewOrder.marketBuy(pair, normalQuantity));
-            orderResponse.setExecutedQty(normalQuantity);
-            return orderResponse;
-        }
-        orderResponse.setExecutedQty(normalQuantity);
         return orderResponse;
-//----------------------------------------------------------------------------------------------------------------------
-//        return orderResponse;
+    }
+
+    private NewOrderResponse TestBuyCoins(Double amtForTrade, String pair, boolean direct, int numPair) {
+        Double pairQuantity;
+        String normalQuantity;
+        NewOrderResponse orderResponse = new NewOrderResponse();
+
+        switch (numPair) {
+            case 1:
+                pairQuantity = withCommission(amtForTrade / getPrice(pair));
+                normalQuantity = normalizeQuantity(pair, pairQuantity);
+                if (isValidQty(pair, normalQuantity)) {
+                    apiRestClient.newOrderTest(NewOrder.marketBuy(pair, normalQuantity));
+                    orderResponse.setExecutedQty(normalQuantity);
+                }
+                break;
+            case 2:
+                if (direct) {
+                    if (pair.contains("BTC") || pair.contains("ETH")) {
+                        pairQuantity = withCommission(amtForTrade / getPrice(pair));
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, normalQuantity)) {
+                            apiRestClient.newOrderTest(NewOrder.marketBuy(pair, normalQuantity));
+                            orderResponse.setExecutedQty(normalQuantity);
+                        }
+                    } else {
+                        pairQuantity = withCommission(amtForTrade * getPrice(pair));
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, amtForTrade.toString())) {
+                            apiRestClient.newOrderTest(NewOrder.marketSell(pair, normalizeQuantity(pair, amtForTrade)));
+                            orderResponse.setExecutedQty(normalQuantity);
+                        }
+                    }
+                } else {
+                    if (pair.contains("BTC") || pair.contains("ETH")) {
+                        pairQuantity = withCommission(amtForTrade * getPrice(pair));
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, amtForTrade.toString())) {
+                            apiRestClient.newOrderTest(NewOrder.marketSell(pair, normalizeQuantity(pair, amtForTrade)));
+                            orderResponse.setExecutedQty(normalQuantity);
+                        }
+                    } else {
+                        pairQuantity = withCommission(amtForTrade / getPrice(pair));
+                        normalQuantity = normalizeQuantity(pair, pairQuantity);
+                        if (isValidQty(pair, normalQuantity)) {
+                            apiRestClient.newOrderTest(NewOrder.marketBuy(pair, normalQuantity));
+                            orderResponse.setExecutedQty(normalQuantity);
+                        }
+                    }
+                }
+                break;
+            case 3:
+                pairQuantity = withCommission(amtForTrade * getPrice(pair));
+                normalQuantity = String.valueOf(pairQuantity);
+                if (isValidQty(pair, amtForTrade.toString())) {
+                    apiRestClient.newOrderTest(NewOrder.marketSell(pair, normalizeQuantity(pair, amtForTrade)));
+                    orderResponse.setExecutedQty(normalQuantity);
+                }
+                break;
+            default:
+        }
+        return orderResponse;
     }
 
     private Double withCommission(Double withoutCommission) {
@@ -135,10 +213,8 @@ public class InArBot {
     private String normalizeQuantity(String pair, Double pairQuantity) {
         SymbolInfo pairInfo = exchangeInfo.getSymbolInfo(pair);
         Double step = Double.valueOf(pairInfo.getFilters().get(1).getStepSize());
-        String normalQuantity = String.format(Locale.UK, "%.8f", Math.floor(pairQuantity / step) * step);
-//        System.out.printf("qty = %s, normQty = %s newPrice = %s;\n", pairQuantity, normalQuantity, getPrice(pair));
-        return normalQuantity;
-
+        //        System.out.printf("qty = %s, normQty = %s newPrice = %s;\n", pairQuantity, normalQuantity, getPrice(pair));
+        return String.format(Locale.UK, "%.8f", Math.floor(pairQuantity / step) * step);
     }
 
     private Boolean isValidQty(String pair, String normalQuantity) {
@@ -160,9 +236,8 @@ public class InArBot {
         return pair1 && pair2 && pair3;
     }
 
-    private NewOrderResponse buyOrSell(String pair, String normalQuantity, Double sumForSell, int numPair, boolean direct) {
+    private NewOrderResponse buyOrSell(String pair, String normalQuantity, int numPair, boolean direct) {
         NewOrderResponse response = new NewOrderResponse();
-        String sumForSellStr = sumForSell.toString();
         switch (numPair) {
             case 1:
                 response = apiRestClient.newOrder(NewOrder.marketBuy(pair, normalQuantity));
@@ -172,18 +247,18 @@ public class InArBot {
                     if (pair.contains("BTC") || pair.contains("ETH")) {
                         response = apiRestClient.newOrder(NewOrder.marketBuy(pair, normalQuantity));
                     } else {
-                        response = apiRestClient.newOrder(NewOrder.marketSell(pair, sumForSellStr));
+                        response = apiRestClient.newOrder(NewOrder.marketSell(pair, normalQuantity));
                     }
                 } else {
                     if (pair.contains("BTC") || pair.contains("ETH")) {
-                        response = apiRestClient.newOrder(NewOrder.marketSell(pair, sumForSellStr));
+                        response = apiRestClient.newOrder(NewOrder.marketSell(pair, normalQuantity));
                     } else {
                         response = apiRestClient.newOrder(NewOrder.marketBuy(pair, normalQuantity));
                     }
                 }
                 break;
             case 3:
-                response = apiRestClient.newOrder(NewOrder.marketSell(pair, sumForSellStr));
+                response = apiRestClient.newOrder(NewOrder.marketSell(pair, normalQuantity));
                 break;
             default:
                 response.setExecutedQty("0.0");
@@ -191,24 +266,24 @@ public class InArBot {
         return response;
     }
 
-    private Double secondPairCalc(String pair, Double firstBuy, boolean direct) {
-//        System.out.printf("pricePair = %s, bet = %s, betWithCom = %s; \n%s; \n", getPrice(pair), firstBuy, withCommission(firstBuy), balanceCache.getAccountBalanceCache());
-        Double secondBuy;
-        if (direct) {
-            if (pair.contains("BTC") || pair.contains("ETH")) {
-                secondBuy = withCommission(firstBuy) / getPrice(pair);
-            } else {
-                secondBuy = withCommission(firstBuy) * getPrice(pair);
-            }
-        } else {
-            if (pair.contains("BTC") || pair.contains("ETH")) {
-                secondBuy = withCommission(firstBuy) * getPrice(pair);
-            } else {
-                secondBuy = withCommission(firstBuy) / getPrice(pair);
-            }
-        }
-        return secondBuy;
-    }
+//    private Double secondPairCalc(String pair, Double firstBuy, boolean direct) {
+////        System.out.printf("pricePair = %s, bet = %s, betWithCom = %s; \n%s; \n", getPrice(pair), firstBuy, withCommission(firstBuy), balanceCache.getAccountBalanceCache());
+//        Double secondBuy;
+//        if (direct) {
+//            if (pair.contains("BTC") || pair.contains("ETH")) {
+//                secondBuy = withCommission(firstBuy) / getPrice(pair);
+//            } else {
+//                secondBuy = withCommission(firstBuy) * getPrice(pair);
+//            }
+//        } else {
+//            if (pair.contains("BTC") || pair.contains("ETH")) {
+//                secondBuy = withCommission(firstBuy) * getPrice(pair);
+//            } else {
+//                secondBuy = withCommission(firstBuy) / getPrice(pair);
+//            }
+//        }
+//        return secondBuy;
+//    }
 
     private Double getPrice(String pair) {
         Optional<TickerPrice> tickerPrice = prices.stream().filter(s -> s.getSymbol().equals(pair)).findFirst();
@@ -217,25 +292,27 @@ public class InArBot {
 
     private void startRefreshingPrices() {
         new Thread(() -> {
-            int timeoutCount = 0;
-            do {
-                try {
-                    apiAsyncRestClient.getAllPrices((List<TickerPrice> response) -> prices = response);
-                    break;
-                } catch (BinanceApiException e) {
-                    ++timeoutCount;
-                    System.err.println("Что-то пошло не так, пробую еще раз");
+            while (true) {
+                int timeoutCount = 0;
+                do {
                     try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e1) {
-                        e1.printStackTrace();
+                        apiAsyncRestClient.getAllPrices((List<TickerPrice> response) -> prices = response);
+                        break;
+                    } catch (BinanceApiException e) {
+                        ++timeoutCount;
+                        System.err.println("Что-то пошло не так, пробую еще раз");
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException e1) {
+                            e1.printStackTrace();
+                        }
                     }
+                } while (timeoutCount <= 100);
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e2) {
+                    e2.printStackTrace();
                 }
-            } while (timeoutCount <= 100);
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException e2) {
-                e2.printStackTrace();
             }
         }).start();
     }
